@@ -612,6 +612,11 @@ async def start_periodic_updates(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     job_name = f'signal_job_{user_id}'
     
+    # Check if job queue is available
+    if not hasattr(context.application, 'job_queue') or context.application.job_queue is None:
+        logger.warning("Job queue not available - periodic updates disabled")
+        return
+    
     current_jobs = context.application.job_queue.get_jobs_by_name(job_name)
     for job in current_jobs:
         job.schedule_removal()
@@ -644,9 +649,10 @@ async def send_periodic_update(context: ContextTypes.DEFAULT_TYPE) -> None:
                 parse_mode='Markdown'
             )
             job_name = f'signal_job_{user_id}'
-            current_jobs = context.application.job_queue.get_jobs_by_name(job_name)
-            for job in current_jobs:
-                job.schedule_removal()
+            if hasattr(context.application, 'job_queue') and context.application.job_queue:
+                current_jobs = context.application.job_queue.get_jobs_by_name(job_name)
+                for job in current_jobs:
+                    job.schedule_removal()
             continue
 
         if not asset:
@@ -664,7 +670,7 @@ async def send_periodic_update(context: ContextTypes.DEFAULT_TYPE) -> None:
             signal_icon = "🟢" if recommendation == "BUY" else "🔴" if recommendation == "SELL" else "🟡"
             
             message = (
-                f"**🔔 Scheduled Signal - {asset}**\n\n"
+                f"🔔 *Scheduled Signal - {asset}*\n\n"
                 f"{signal_icon} **Action: {recommendation}**\n\n"
                 f"**Market Analysis:**\n"
                 f"_{justification}_\n\n"
@@ -726,7 +732,19 @@ async def start_menu_from_callback(update: Update, context: ContextTypes.DEFAULT
 
 def main() -> None:
     """Start the bot."""
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # Create application with job queue
+    try:
+        application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    except Exception as e:
+        logger.error(f"Failed to create application: {e}")
+        return
+
+    # Check if job queue is available
+    job_queue_available = hasattr(application, 'job_queue') and application.job_queue is not None
+    
+    if not job_queue_available:
+        logger.warning("⚠️ Job queue not available - periodic updates will be disabled")
+        logger.warning("💡 Install with: pip install 'python-telegram-bot[job-queue]'")
     
     # Handlers
     application.add_handler(CommandHandler("start", start))
@@ -754,23 +772,30 @@ def main() -> None:
     db_manager.update_user_subscription(ADMIN_TELEGRAM_ID, 36500, is_admin=True)
     db_manager.set_user_asset(ADMIN_TELEGRAM_ID, "TSLA")
 
-    # Restore user jobs
-    for user in db_manager.get_all_subscribed_users():
-        user_id = user['user_id']
-        job_name = f'signal_job_{user_id}'
-        
-        if user['is_subscribed'] and user['selected_asset']:
-            application.job_queue.run_repeating(
-                send_periodic_update,
-                interval=1800,
-                first=10,
-                name=job_name,
-                data={'user_id': user_id}
-            )
-            logger.info(f"Restored job for user {user_id}")
+    # Restore user jobs only if job queue is available
+    if job_queue_available:
+        for user in db_manager.get_all_subscribed_users():
+            user_id = user['user_id']
+            job_name = f'signal_job_{user_id}'
+            
+            if user['is_subscribed'] and user['selected_asset']:
+                application.job_queue.run_repeating(
+                    send_periodic_update,
+                    interval=1800,
+                    first=10,
+                    name=job_name,
+                    data={'user_id': user_id}
+                )
+                logger.info(f"Restored job for user {user_id}")
+    else:
+        logger.info("Skipping job restoration - job queue not available")
 
     # Start bot
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        logger.info("🚀 Fayad Trading Bot starting...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    except Exception as e:
+        logger.error(f"Bot failed to start: {e}")
 
 
 if __name__ == '__main__':
