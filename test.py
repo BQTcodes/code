@@ -24,8 +24,7 @@ TELEGRAM_BOT_TOKEN = "8557811828:AAGOHH0ATVUtZb7lwu2VOM9Jbuflb_O7hO0"
 ADMIN_TELEGRAM_ID = 994618750
 
 # RapidAPI Configuration
-RAPIDAPI_KEY =
-"8eeb93c824msh84e2f62ce8e3450p1b47c8jsnab7fa280287e"  # Replace with your key
+RAPIDAPI_KEY = "8eeb93c824msh84e2f62ce8e3450p1b47c8jsnab7fa280287e"  # Replace with your key
 RAPIDAPI_HOST = "realstonks.p.rapidapi.com"
 
 # Gemini API Configuration (for advanced prediction logic)
